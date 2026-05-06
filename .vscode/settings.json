@@ -4,6 +4,6 @@
         "request": "launch",
         "program": "${command:cmake.launchTargetPath}",
         "args": [],
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/test1"
     }
 }
