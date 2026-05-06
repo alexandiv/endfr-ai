@@ -1,1 +1,6 @@
 build/
+
+test1/*.reconr
+test1/*.inp
+test1/*.output
+test1/tape*
