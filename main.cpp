@@ -229,8 +229,8 @@ void write_reconr_input(const run_config &cfg, const char *inp_path)
     fprintf(f, " 20 21\n");
     fprintf(f, "'%s'/\n", label.c_str());
     fprintf(f, "%d/\n", cfg.endf_mat);
-    fprintf(f, "%g/\n", cfg.err);
     fprintf(f, "%g %g %g %g/\n", cfg.err, cfg.tempr, cfg.errmax, cfg.errint);
+    fprintf(f, "0/\n");
     fprintf(f, "stop\n");
 
     fclose(f);
