@@ -1,5 +1,5 @@
 #include <cstdio>
-#include <cstring>
+#include <fstream>
 #include <string>
 #include <unistd.h>
 
@@ -9,142 +9,123 @@
 // Конфигурация запуска
 // ---------------------------------------------------------------------------
 
-const int16_t PATH_LEN = 1024;
-
 struct run_config
 {
-    std::string endf_path;   // путь к исходному endf-файлу
+    std::string endf_path; // путь к исходному endf-файлу
     std::string endf_dir;
     std::string endf_name;
     std::string reconr_path;
     std::string output_path;
-    int32_t     endf_mat;    // номер материала
-    double      err;         // точность сечения (обязательно)
-    double      errmax;      // макс ошибка (умолчание: 10*err)
-    double      errint;      // интерполяция ошибки (умолчание: err/20000)
-    double      tempr;       // температура (умолчание: 0)
+    int32_t     endf_mat; // номер материала
+    double      err;      // точность сечения (обязательно)
+    double      errmax;   // макс ошибка (умолчание: 10*err)
+    double      errint;   // интерполяция ошибки (умолчание: err/20000)
+    double      tempr;    // температура (умолчание: 0)
 };
 
 // Объявления
-void read_input(const char *path, run_config &cfg);
+void read_input(const std::string &path, run_config &cfg);
 void write_reconr_input(const run_config &cfg, const char *inp_path);
 void run_reconr(run_config &cfg);
 
 static std::string extract_basename(const std::string &path);
 static std::string extract_dir(const std::string &path);
-static void strip_comment(char *buf);
-static bool is_blank(const char *buf);
-static int read_next_nonblank(FILE *f, char *buf, int maxlen);
+static bool        strip_comment(std::string &buf);
+static bool        read_next_nonblank(std::ifstream &f, std::string &buf);
 
-// Удаляет inline комментарий (# или !) и завершающий перевод строки
-static void strip_comment(char *buf)
+// Удаляет inline комментарий (!) и обрезает пробелы
+static bool strip_comment(std::string &buf)
 {
-    for (int i = 0; buf[i] != '\0'; ++i)
-    {
-        if (buf[i] == '#' || buf[i] == '!')
-        {
-            buf[i] = '\0';
-            break;
-        }
-    }
-    // убираем trailing whitespace/newline
-    int len = (int)std::strlen(buf);
-    while (len > 0 && (buf[len - 1] == ' ' || buf[len - 1] == '\t' ||
-                       buf[len - 1] == '\n' || buf[len - 1] == '\r'))
-    {
-        buf[--len] = '\0';
-    }
-}
+    // комментарии
+    std::string::size_type pos = buf.find_first_of("!");
+    if (pos != std::string::npos)
+        buf.erase(pos);
 
-// Проверяет, что строка пустая или только пробелы
-static bool is_blank(const char *buf)
-{
-    for (int i = 0; buf[i] != '\0'; ++i)
+    // ведущие пробелы
+    std::string::size_type first = buf.find_first_not_of(" \t");
+    if (first == std::string::npos)
     {
-        if (buf[i] != ' ' && buf[i] != '\t' && buf[i] != '\n' &&
-            buf[i] != '\r')
-        {
-            return false;
-        }
+        buf.clear();
+        return false;
     }
+    buf.erase(0, first);
+
+    // последние пробелы
+    std::string::size_type last = buf.find_last_not_of(" \t");
+    buf.erase(last + 1);
     return true;
 }
 
-// Читает следующую непустую (после strip_comment) строку.
-// Возвращает 0 при EOF, 1 при успехе.
-static int read_next_nonblank(FILE *f, char *buf, int maxlen)
+static bool read_next_nonblank(std::ifstream &f, std::string &buf)
 {
-    while (std::fgets(buf, maxlen, f) != NULL)
+    while (std::getline(f, buf))
     {
-        strip_comment(buf);
-        if (!is_blank(buf))
-            return 1;
+        if (strip_comment(buf))
+            return true;
     }
-    return 0;
+    return false;
 }
 
-// Читает файл input с поддержкой комментариев (#, !)
+// Читает файл input с поддержкой комментариев (!)
 //   строка 1: endf_path (обязательно)
 //   строка 2: mat (обязательно)
 //   строка 3: err (обязательно)
 //   строка 4: errmax (опционально, умолчание: 10*err)
 //   строка 5: errint (опционально, умолчание: err/20000)
 //   строка 6: tempr (опционально, умолчание: 0)
-void read_input(const char *path, run_config &cfg)
+void read_input(const std::string &path, run_config &cfg)
 {
-    FILE *f = fopen(path, "r");
-    if (f == NULL)
+    std::ifstream f(path);
+    if (!f.is_open())
     {
-        fprintf(stderr, "- Error: cannot open input file '%s'\n", path);
+        fprintf(stderr, "- Error: cannot open input file '%s'\n", path.c_str());
         exit(EXIT_FAILURE);
     }
 
-    char buf[PATH_LEN];
+    std::string buf;
 
     // строка 1: endf_path
-    if (read_next_nonblank(f, buf, PATH_LEN) == 0)
+    if (!read_next_nonblank(f, buf))
     {
-        fprintf(stderr, "- Error: cannot read endf_path from '%s'\n", path);
-        fclose(f);
+        fprintf(stderr, "- Error: cannot read endf_path from '%s'\n",
+                path.c_str());
         exit(EXIT_FAILURE);
     }
     cfg.endf_path = buf;
 
     // строка 2: mat
-    if (read_next_nonblank(f, buf, PATH_LEN) == 0)
+    if (!read_next_nonblank(f, buf))
     {
-        fprintf(stderr, "- Error: cannot read endf_mat from '%s'\n", path);
-        fclose(f);
+        fprintf(stderr, "- Error: cannot read endf_mat from '%s'\n",
+                path.c_str());
         exit(EXIT_FAILURE);
     }
-    if (std::sscanf(buf, " %d", &cfg.endf_mat) != 1)
+    if (std::sscanf(buf.c_str(), " %d", &cfg.endf_mat) != 1)
     {
-        fprintf(stderr, "- Error: cannot parse endf_mat from '%s'\n", buf);
-        fclose(f);
+        fprintf(stderr, "- Error: cannot parse endf_mat from '%s'\n",
+                buf.c_str());
         exit(EXIT_FAILURE);
     }
 
     // строка 3: err (обязательно)
-    if (read_next_nonblank(f, buf, PATH_LEN) == 0)
+    if (!read_next_nonblank(f, buf))
     {
-        fprintf(stderr, "- Error: cannot read err from '%s'\n", path);
-        fclose(f);
+        fprintf(stderr, "- Error: cannot read err from '%s'\n", path.c_str());
         exit(EXIT_FAILURE);
     }
-    if (std::sscanf(buf, " %lf", &cfg.err) != 1)
+    if (std::sscanf(buf.c_str(), " %lf", &cfg.err) != 1)
     {
-        fprintf(stderr, "- Error: cannot parse err from '%s'\n", buf);
-        fclose(f);
+        fprintf(stderr, "- Error: cannot parse err from '%s'\n", buf.c_str());
         exit(EXIT_FAILURE);
     }
 
     // строка 4: errmax (опционально)
-    if (read_next_nonblank(f, buf, PATH_LEN) == 1)
+    if (read_next_nonblank(f, buf))
     {
-        if (std::sscanf(buf, " %lf", &cfg.errmax) != 1)
+        if (std::sscanf(buf.c_str(), " %lf", &cfg.errmax) != 1)
         {
-            fprintf(stderr, "- Error: cannot parse errmax from '%s'\n", buf);
-            fclose(f);
+            fprintf(stderr, "- Error: cannot parse errmax from '%s'\n",
+                    buf.c_str());
             exit(EXIT_FAILURE);
         }
     }
@@ -154,12 +135,12 @@ void read_input(const char *path, run_config &cfg)
     }
 
     // строка 5: errint (опционально)
-    if (read_next_nonblank(f, buf, PATH_LEN) == 1)
+    if (read_next_nonblank(f, buf))
     {
-        if (std::sscanf(buf, " %lf", &cfg.errint) != 1)
+        if (std::sscanf(buf.c_str(), " %lf", &cfg.errint) != 1)
         {
-            fprintf(stderr, "- Error: cannot parse errint from '%s'\n", buf);
-            fclose(f);
+            fprintf(stderr, "- Error: cannot parse errint from '%s'\n",
+                    buf.c_str());
             exit(EXIT_FAILURE);
         }
     }
@@ -169,12 +150,12 @@ void read_input(const char *path, run_config &cfg)
     }
 
     // строка 6: tempr (опционально)
-    if (read_next_nonblank(f, buf, PATH_LEN) == 1)
+    if (read_next_nonblank(f, buf))
     {
-        if (std::sscanf(buf, " %lf", &cfg.tempr) != 1)
+        if (std::sscanf(buf.c_str(), " %lf", &cfg.tempr) != 1)
         {
-            fprintf(stderr, "- Error: cannot parse tempr from '%s'\n", buf);
-            fclose(f);
+            fprintf(stderr, "- Error: cannot parse tempr from '%s'\n",
+                    buf.c_str());
             exit(EXIT_FAILURE);
         }
     }
@@ -182,8 +163,6 @@ void read_input(const char *path, run_config &cfg)
     {
         cfg.tempr = 0.0;
     }
-
-    fclose(f);
 }
 
 // Выделяет basename файла, убирая расширение
