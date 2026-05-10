@@ -10,6 +10,7 @@ namespace endf
 void read_tape(FILE *lib, isotope &iso);
 void read_1_451(FILE *lib, isotope &iso, std::vector<fsection> &fsections);
 void read_3(FILE *lib, csection &cs, int32_t mt);
+void read_4_2(FILE *lib);
 
 void read_cont(FILE *lib, cont &c);
 void read_tab1(FILE *lib, tab1 &t);
@@ -55,20 +56,32 @@ void read_tape(FILE *lib, isotope &iso)
         int32_t mt = fsections[i].mt;
 
         if (mf == 1 && mt == 451)
-            continue;
-
-        if (mf != 3)
         {
-            skip_to_fend(lib);
             continue;
         }
 
-        csection cs;
-        read_3(lib, cs, mt);
-        iso.csections.push_back(std::move(cs));
+        if (mf == 3)
+        {
+            fprintf(stdout, "+ Reading MF=3 MT=%d\n", mt);
+            csection cs;
+            read_3(lib, cs, mt);
+            iso.csections.push_back(std::move(cs));
+            fprintf(stdout, "+ Parsed section: MF=%d MT=%d\n", mf, mt);
+        }
+        else if (mf == 4 && mt == 2)
+        {
+            fprintf(stdout, "+ Reading MF=4 MT=2\n");
+            read_4_2(lib);
+            fprintf(stdout, "+ Parsed section: MF=%d MT=%d\n", mf, mt);
+        }
+        else
+        {
+            fprintf(stdout, "+ Skipping MF=%d MT=%d\n", mf, mt);
+            skip_to_fend(lib);
+        }
     }
 
-    // FEND после последней секции MF=3
+    // FEND после последней секции
     expect_fend(lib);
 }
 
@@ -140,6 +153,12 @@ void read_3(FILE *lib, csection &cs, int32_t mt)
 
     // SEND после секции
     expect_send(lib);
+}
+
+void read_4_2(FILE *lib)
+{
+    // перемотка секции MF=4 MT=2
+    skip_to_fend(lib);
 }
 
 void read_1_451(FILE *lib, isotope &iso, std::vector<fsection> &fsections)

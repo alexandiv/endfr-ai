@@ -105,6 +105,7 @@ struct isotope
 void read_tape(FILE *lib, isotope &iso);
 void read_1_451(FILE *lib, isotope &iso, std::vector<fsection> &fsections);
 void read_3(FILE *lib, csection &cs, int32_t mt);
+void read_4_2(FILE *lib);
 
 void read_cont(FILE *lib, cont &c);
 void read_tab1(FILE *lib, tab1 &t);

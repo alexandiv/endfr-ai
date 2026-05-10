@@ -273,5 +273,36 @@ int main()
     cfg.output_path = cfg.endf_dir + cfg.endf_name + ".output";
     run_reconr(cfg);
 
+    // чтение reconr файла (только сечения)
+	FILE* lib = fopen(cfg.reconr_path.c_str(), "r");
+	if (lib == NULL)
+	{
+		fprintf(stderr, "- Error in fopen %s\n", cfg.reconr_path.c_str());
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		fprintf(stdout, "+ Success in fopen: %s\n", cfg.reconr_path.c_str());
+	}
+
+    endf::isotope iso;
+	endf::read_tape(lib, iso);
+	fclose(lib);
+
+    // чтение endf файла
+	lib = fopen(cfg.endf_path.c_str(), "r");
+	if (lib == NULL)
+	{
+		fprintf(stderr, "- Error in fopen %s\n", cfg.endf_path.c_str());
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		fprintf(stdout, "+ Success in fopen: %s\n", cfg.endf_path.c_str());
+	}
+
+	endf::read_tape(lib, iso);
+	fclose(lib);
+
     return 0;
 }
